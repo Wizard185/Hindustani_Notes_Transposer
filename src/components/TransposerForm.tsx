@@ -29,6 +29,7 @@ const TransposerForm: React.FC = () => {
   const [result, setResult] = useState<{
     original: string[];
     transposed: string[];
+    transposedFormatted: string; // Added to store formatted output
     semitones: number;
     fromScale?: string;
     toScale?: string;
@@ -37,120 +38,168 @@ const TransposerForm: React.FC = () => {
   const { addToHistory, user } = useAuth();
   const { toast } = useToast();
 
-  const saveToSupabase = async (entry: {
-    type: 'semitone' | 'scale';
-    originalNotes: string[];
-    transposedNotes: string[];
-    semitones: number;
-    fromScale?: string;
-    toScale?: string;
-  }) => {
-    const { error } = await supabase.from('transposition_history').insert([
-      {
-        ...entry,
-        user_email: user?.email || 'unknown',
-        timestamp: new Date().toISOString(),
-      },
-    ]);
-    if (error) {
-      console.error('Supabase insert error:', error);
-      toast({
-        title: 'Warning',
-        description: 'Could not save history to database.',
-      });
+const saveToSupabase = async (entry: {
+  type: 'semitone' | 'scale';
+  originalNotes: string[];
+  transposedNotes: string[];
+  originalFormatted: string;  // Add this
+  transposedFormatted: string;  // Add this
+  semitones: number;
+  fromScale?: string;
+  toScale?: string;
+}) => {
+  const { error } = await supabase.from('transposition_history').insert([
+    {
+      type: entry.type,
+      original_notes: entry.originalNotes,
+      transposed_notes: entry.transposedNotes,
+      original_formatted: entry.originalFormatted,  // Add this
+      transposed_formatted: entry.transposedFormatted,  // Add this
+      semitones: entry.semitones,
+      from_scale: entry.fromScale,
+      to_scale: entry.toScale,
+      user_email: user?.email || 'unknown',
+      created_at: new Date().toISOString(),
+    },
+  ]);
+  
+  if (error) {
+    console.error('Supabase insert error:', error);
+    toast({
+      title: 'Warning',
+      description: 'Could not save history to database.',
+    });
+    return false;
+  }
+  return true;
+};
+
+
+  // Function to preserve input formatting in output
+  const preserveFormatting = (input: string, transposedNotes: string[]) => {
+    const lines = input.split('\n');
+    const transposedLines = [];
+    let noteIndex = 0;
+
+    for (const line of lines) {
+      const words = line.split(/(\s+)/); // Split while preserving whitespace
+      const transposedLine = words.map(word => {
+        if (word.trim() && !/^\s+$/.test(word)) {
+          // If it's not just whitespace, it's a note
+          if (noteIndex < transposedNotes.length) {
+            return transposedNotes[noteIndex++];
+          }
+          return word;
+        }
+        return word; // Preserve whitespace as-is
+      }).join('');
+      
+      transposedLines.push(transposedLine);
     }
+
+    return transposedLines.join('\n');
   };
 
-  const handleSemitoneTranspose = async () => {
-    if (!notesInput.trim() || !semitones.trim()) {
-      return toast({
-        title: 'Error',
-        description: 'Please enter notes and semitones',
-        variant: 'destructive',
-      });
-    }
+ const handleSemitoneTranspose = async () => {
+  if (!notesInput.trim() || !semitones.trim()) {
+    return toast({
+      title: 'Error',
+      description: 'Please enter notes and semitones',
+      variant: 'destructive',
+    });
+  }
 
-    const semitonesNum = parseInt(semitones);
-    if (isNaN(semitonesNum)) {
-      return toast({
-        title: 'Error',
-        description: 'Semitones must be a valid number',
-        variant: 'destructive',
-      });
-    }
+  const semitonesNum = parseInt(semitones);
+  if (isNaN(semitonesNum)) {
+    return toast({
+      title: 'Error',
+      description: 'Semitones must be a valid number',
+      variant: 'destructive',
+    });
+  }
 
-    const originalNotes = notesInput.trim().split(/\s+/);
-    const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
+  const originalNotes = notesInput.trim().split(/\s+/);
+  const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
+  const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
 
-    const newResult = {
-      original: originalNotes,
-      transposed: transposedNotes,
-      semitones: semitonesNum,
-    };
-
-    setResult(newResult);
-    const dbEntry = {
-      originalNotes,
-      transposedNotes,
-      semitones: semitonesNum,
-      type: 'semitone' as const,
-    };
-
-    addToHistory(dbEntry);
-    await saveToSupabase(dbEntry);
-
-    toast({ title: 'Success', description: 'Transposition complete!' });
+  const newResult = {
+    original: originalNotes,
+    transposed: transposedNotes,
+    transposedFormatted,
+    semitones: semitonesNum,
   };
 
-  const handleScaleTranspose = async () => {
-    if (!notesInput.trim() || !fromScale || !toScale) {
-      return toast({
-        title: 'Error',
-        description: 'Please enter all fields',
-        variant: 'destructive',
-      });
-    }
-
-    const semitonesNum = transposer.calculateSemitoneDifferenceWestern(fromScale, toScale);
-    if (semitonesNum === null || isNaN(semitonesNum)) {
-      return toast({
-        title: 'Error',
-        description: 'Invalid scale conversion',
-        variant: 'destructive',
-      });
-    }
-
-    const originalNotes = notesInput.trim().split(/\s+/);
-    const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
-
-    const newResult = {
-      original: originalNotes,
-      transposed: transposedNotes,
-      semitones: semitonesNum,
-      fromScale,
-      toScale,
-    };
-
-    setResult(newResult);
-    const dbEntry = {
-      originalNotes,
-      transposedNotes,
-      semitones: semitonesNum,
-      fromScale,
-      toScale,
-      type: 'scale' as const,
-    };
-
-    addToHistory(dbEntry);
-    await saveToSupabase(dbEntry);
-
-    toast({ title: 'Success', description: 'Scale transposed successfully!' });
+  setResult(newResult);
+  
+  const dbEntry = {
+    type: 'semitone' as const,
+    originalNotes,
+    transposedNotes,
+    originalFormatted: notesInput,  // Add this
+    transposedFormatted,  // Add this
+    semitones: semitonesNum,
   };
+
+  addToHistory(dbEntry);
+  await saveToSupabase(dbEntry);
+
+  toast({ title: 'Success', description: 'Transposition complete!' });
+};
+
+const handleScaleTranspose = async () => {
+  if (!notesInput.trim() || !fromScale || !toScale) {
+    return toast({
+      title: 'Error',
+      description: 'Please enter all fields',
+      variant: 'destructive',
+    });
+  }
+
+  const semitonesNum = transposer.calculateSemitoneDifferenceWestern(fromScale, toScale);
+  if (semitonesNum === null || isNaN(semitonesNum)) {
+    return toast({
+      title: 'Error',
+      description: 'Invalid scale conversion',
+      variant: 'destructive',
+    });
+  }
+
+  const originalNotes = notesInput.trim().split(/\s+/);
+  const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
+  const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
+
+  const newResult = {
+    original: originalNotes,
+    transposed: transposedNotes,
+    transposedFormatted,
+    semitones: semitonesNum,
+    fromScale,
+    toScale,
+  };
+
+  setResult(newResult);
+  
+  const dbEntry = {
+    type: 'scale' as const,
+    originalNotes,
+    transposedNotes,
+    originalFormatted: notesInput,  // Add this
+    transposedFormatted,  // Add this
+    semitones: semitonesNum,
+    fromScale,
+    toScale,
+  };
+
+  addToHistory(dbEntry);
+  await saveToSupabase(dbEntry);
+
+  toast({ title: 'Success', description: 'Scale transposed successfully!' });
+};
 
   const copyToClipboard = async () => {
-    if (!result?.transposed) return;
+    if (!result?.transposedFormatted) return;
 
-    const text = result.transposed.join(' ');
+    const text = result.transposedFormatted;
 
     try {
       await navigator.clipboard.writeText(text);
@@ -298,9 +347,9 @@ const TransposerForm: React.FC = () => {
               <Label className="text-white">Transposed Notes</Label>
               <textarea
                 rows={5}
-                value={result.transposed.join(' ')}
+                value={result.transposedFormatted}
                 readOnly
-                className="w-full resize-y bg-white/10 border border-white/20 text-white p-2 rounded"
+                className="w-full resize-y bg-white/10 border border-white/20 text-white p-2 rounded font-mono"
               />
             </div>
             <div className="text-slate-400 text-sm pt-2 border-t border-white/20 flex gap-4">
