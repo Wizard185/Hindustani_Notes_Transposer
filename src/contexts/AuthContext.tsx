@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '@/supabase/supabaseClient';
+import { App as CapacitorApp } from '@capacitor/app';
+import type { PluginListenerHandle } from '@capacitor/core';
 
 interface User {
   id: string;
@@ -43,35 +45,72 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // 🔁 Load session and history on mount
   useEffect(() => {
-    const fetchUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      if (data?.user) {
-        const newUser = { id: data.user.id, email: data.user.email! };
-        setUser(newUser);
-        await loadUserHistory(newUser.id);
-      }
-    };
+  const getInitialSession = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      const newUser = { id: session.user.id, email: session.user.email! };
+      setUser(newUser);
+      await loadUserHistory(newUser.id);
+    }
+  };
 
-    fetchUser();
+  getInitialSession(); // ✅ Initial session check
 
-    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        const newUser = { id: session.user.id, email: session.user.email! };
-        setUser(newUser);
-         // Avoid reloading history if user is already set, unless it's a new user
-        if (user?.id !== newUser.id) {
+  // 🔄 Handle login/logout/session updates
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    if (session?.user) {
+      const newUser = { id: session.user.id, email: session.user.email! };
+      setUser(newUser);
+      await loadUserHistory(newUser.id);
+    } else {
+      setUser(null);
+      setHistory([]);
+    }
+  });
+
+  return () => {
+    subscription.unsubscribe();
+  };
+}, []);
+// ✅ Keep session alive (especially after idle or app resume)
+useEffect(() => {
+  const refreshInterval = setInterval(() => {
+    supabase.auth.refreshSession().catch((err) => {
+      console.error('Session refresh failed:', err.message);
+    });
+  }, 10 * 60 * 1000); // every 10 minutes
+
+  return () => clearInterval(refreshInterval);
+}, []);
+useEffect(() => {
+  let listener: PluginListenerHandle;
+
+  const setupListener = async () => {
+    listener = await CapacitorApp.addListener('appStateChange', async ({ isActive }) => {
+      if (isActive) {
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session?.user) {
+            const newUser = { id: session.user.id, email: session.user.email! };
+            setUser(newUser);
             await loadUserHistory(newUser.id);
+          }
+        } catch (error) {
+          console.error('Failed to refresh on app resume:', error.message);
         }
-      } else {
-        setUser(null);
-        setHistory([]);
       }
     });
+  };
 
-    return () => {
-      listener?.subscription.unsubscribe();
-    };
-  }, []);
+  setupListener();
+
+  return () => {
+    listener?.remove(); // ✅ Correct, now 'listener' is defined
+  };
+}, []);
+
 
   const loadUserHistory = async (userId: string) => {
     const { data, error } = await supabase

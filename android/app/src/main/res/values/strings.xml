@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Notes Transposer</string>
+    <string name="title_activity_main">Notes Transposer</string>
+    <string name="package_name">app.lovable.e6d161f842af4b6c9ac71c0a067a1872</string>
+    <string name="custom_url_scheme">app.lovable.e6d161f842af4b6c9ac71c0a067a1872</string>
+</resources>
