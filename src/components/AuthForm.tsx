@@ -1,10 +1,11 @@
+// src/components/AuthForm.tsx
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/supabase/supabaseClient';
 import { Music, UserPlus, LogIn, Mail, ArrowLeft } from 'lucide-react';
 
 const AuthForm: React.FC = () => {
@@ -14,11 +15,9 @@ const AuthForm: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  
-  const { login, signup, sendPasswordResetEmail } = useAuth();
+
   const { toast } = useToast();
 
-  // --- Refactored Logic: Dedicated handler for Login/Signup ---
   const handleLoginOrSignup = async () => {
     if (!email.trim() || !password.trim()) {
       toast({ title: "Error", description: "Please fill in all fields", variant: "destructive" });
@@ -30,19 +29,19 @@ const AuthForm: React.FC = () => {
     }
 
     try {
-      let success = false;
+      let result;
       if (isLogin) {
-        success = await login(email, password);
-        if (!success) {
-          toast({ title: "Login Failed", description: "Invalid email or password.", variant: "destructive" });
+        result = await supabase.auth.signInWithPassword({ email, password });
+        if (result.error) {
+          toast({ title: "Login Failed", description: result.error.message, variant: "destructive" });
         }
       } else {
-        success = await signup(email, password);
-        if (!success) {
-          toast({ title: "Signup Failed", description: "Could not create account. The email may already be in use.", variant: "destructive" });
+        result = await supabase.auth.signUp({ email, password });
+        if (result.error) {
+          toast({ title: "Signup Failed", description: result.error.message, variant: "destructive" });
         } else {
           toast({ title: "Welcome!", description: "Account created. Please check your email to verify your account." });
-          setIsLogin(true); // Switch to login view after successful signup
+          setIsLogin(true);
         }
       }
     } catch (error) {
@@ -50,15 +49,12 @@ const AuthForm: React.FC = () => {
     }
   };
 
-  // --- Refactored Logic: Dedicated handler for Password Reset ---
   const handlePasswordReset = async () => {
-    // Improved email validation
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       toast({ title: "Error", description: "Please enter a valid email address.", variant: "destructive" });
       return;
     }
-    await sendPasswordResetEmail(email);
-    // We don't check for success to prevent user enumeration attacks. Always show a generic message.
+    await supabase.auth.resetPasswordForEmail(email);
     toast({
       title: "Check your email",
       description: "If an account with that email exists, we've sent a password reset link.",
@@ -66,20 +62,17 @@ const AuthForm: React.FC = () => {
     setIsForgotPassword(false);
   };
 
-  // --- Main submit handler now acts as a router ---
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-
     if (isForgotPassword) {
       await handlePasswordReset();
     } else {
       await handleLoginOrSignup();
     }
-
     setLoading(false);
   };
-  
+
   const getTitle = () => {
     if (isForgotPassword) return 'Reset Password';
     return isLogin ? 'Welcome Back' : 'Create Account';
@@ -115,7 +108,7 @@ const AuthForm: React.FC = () => {
                   className="bg-white/10 border-white/20 text-white placeholder:text-slate-400"
                 />
               </div>
-              
+
               {!isForgotPassword && (
                 <>
                   <div className="space-y-2">
@@ -131,9 +124,9 @@ const AuthForm: React.FC = () => {
                   </div>
                   {isLogin && (
                     <div className="flex justify-end -mt-2">
-                       <Button 
-                        type="button" 
-                        variant="link" 
+                      <Button
+                        type="button"
+                        variant="link"
                         className="p-0 h-auto text-sm text-slate-400 hover:text-white"
                         onClick={() => setIsForgotPassword(true)}
                       >
@@ -167,7 +160,7 @@ const AuthForm: React.FC = () => {
                 )}
               </Button>
             </form>
-            
+
             <div className="text-center mt-6">
               {isForgotPassword ? (
                 <Button variant="ghost" onClick={() => setIsForgotPassword(false)} className="text-slate-400 hover:text-white">
