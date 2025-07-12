@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   Card,
   CardContent,
@@ -18,152 +18,105 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { transposer } from '@/utils/transposer';
-import { Music2, RotateCcw, ClipboardCopy } from 'lucide-react';
+// 1. ADD ArrowRightLeft ICON BACK
+import { Music2, RotateCcw, ClipboardCopy, ArrowRightLeft } from 'lucide-react';
 
-const TransposerForm: React.FC = () => {
-  const [notesInput, setNotesInput] = useState('');
-  const [semitones, setSemitones] = useState('');
-  const [fromScale, setFromScale] = useState('');
-  const [toScale, setToScale] = useState('');
-  const [result, setResult] = useState<{
-    original: string[];
-    transposed: string[];
-    transposedFormatted: string;
-    semitones: number;
-    fromScale?: string;
-    toScale?: string;
-  } | null>(null);
+export type TransposerResult = {
+  original: string[];
+  transposed: string[];
+  transposedFormatted: string;
+  semitones: number;
+  fromScale?: string;
+  toScale?: string;
+};
 
+interface TransposerFormProps {
+  notesInput: string;
+  setNotesInput: (value: string) => void;
+  semitones: string;
+  setSemitones: (value: string) => void;
+  fromScale: string;
+  setFromScale: (value: string) => void;
+  toScale: string;
+  setToScale: (value: string) => void;
+  result: TransposerResult | null;
+  setResult: (result: TransposerResult | null) => void;
+}
+
+const TransposerForm: React.FC<TransposerFormProps> = ({
+  notesInput, setNotesInput,
+  semitones, setSemitones,
+  fromScale, setFromScale,
+  toScale, setToScale,
+  result, setResult
+}) => {
   const { addToHistory } = useAuth();
   const { toast } = useToast();
 
+  // 2. ADD THE HANDLER FUNCTION BACK
+  const handleSwapScales = () => {
+    setFromScale(toScale);
+    setToScale(fromScale);
+  };
+  
   const preserveFormatting = (input: string, transposedNotes: string[]) => {
+    if (!Array.isArray(transposedNotes)) return "Error: Transposition failed.";
     const lines = input.split('\n');
-    const transposedLines = [];
     let noteIndex = 0;
-
-    for (const line of lines) {
-      const words = line.split(/(\s+)/); // Preserve whitespace
-      const transposedLine = words.map(word => {
-        if (word.trim() && !/^\s+$/.test(word)) {
-          if (noteIndex < transposedNotes.length) {
-            return transposedNotes[noteIndex++];
-          }
-          return word;
+    return lines.map(line => 
+      line.split(/(\s+)/).map(word => {
+        if (word.trim() && !/^\s+$/.test(word) && noteIndex < transposedNotes.length) {
+          return transposedNotes[noteIndex++];
         }
         return word;
-      }).join('');
-      transposedLines.push(transposedLine);
-    }
-
-    return transposedLines.join('\n');
+      }).join('')
+    ).join('\n');
   };
+  
+  const performTranspose = async (type: 'semitone' | 'scale') => {
+    try {
+      if (!notesInput.trim()) return toast({ title: 'Input Missing', description: 'Please enter notes to transpose.', variant: 'destructive' });
+      let semitonesNum: number | null;
+      if (type === 'semitone') {
+        if (!semitones.trim()) return toast({ title: 'Input Missing', description: 'Please enter semitones.', variant: 'destructive' });
+        semitonesNum = parseInt(semitones);
+        if (isNaN(semitonesNum)) return toast({ title: 'Invalid Input', description: 'Semitones must be a valid number.', variant: 'destructive' });
+      } else {
+        if (!fromScale || !toScale) return toast({ title: 'Input Missing', description: 'Please select both scales.', variant: 'destructive' });
+        semitonesNum = transposer.calculateSemitoneDifferenceWestern(fromScale, toScale);
+        if (semitonesNum === null) return toast({ title: 'Error', description: 'Invalid scale conversion.', variant: 'destructive' });
+      }
+      
+      const originalNotes = notesInput.trim().split(/\s+/);
+      const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
+      if (!transposedNotes || !Array.isArray(transposedNotes)) throw new Error("Transposition function failed.");
 
-  const handleSemitoneTranspose = async () => {
-    if (!notesInput.trim() || !semitones.trim()) {
-      return toast({
-        title: 'Error',
-        description: 'Please enter notes and semitones',
-        variant: 'destructive',
-      });
+      const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
+      const newResult: TransposerResult = {
+        original: originalNotes, transposed: transposedNotes, transposedFormatted, semitones: semitonesNum,
+        ...(type === 'scale' && { fromScale, toScale }),
+      };
+      setResult(newResult);
+
+      const dbEntry = {
+        type: type, originalNotes: originalNotes, transposedNotes: transposedNotes,
+        originalFormatted: notesInput, transposedFormatted: transposedFormatted, semitones: semitonesNum,
+        ...(type === 'scale' && { fromScale, toScale }),
+      };
+      await addToHistory(dbEntry);
+      toast({ title: 'Success!', description: 'Transposition complete.' });
+    } catch (error) {
+      console.error("Transposition Failed:", error);
+      toast({ title: 'An Error Occurred', description: error instanceof Error ? error.message : 'Unknown error.', variant: 'destructive' });
     }
-
-    const semitonesNum = parseInt(semitones);
-    if (isNaN(semitonesNum)) {
-      return toast({
-        title: 'Error',
-        description: 'Semitones must be a valid number',
-        variant: 'destructive',
-      });
-    }
-
-    const originalNotes = notesInput.trim().split(/\s+/);
-    const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
-    const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
-
-    const newResult = {
-      original: originalNotes,
-      transposed: transposedNotes,
-      transposedFormatted,
-      semitones: semitonesNum,
-    };
-
-    setResult(newResult);
-
-    const dbEntry = {
-      type: 'semitone' as const,
-      originalNotes,
-      transposedNotes,
-      originalFormatted: notesInput,
-      transposedFormatted,
-      semitones: semitonesNum,
-    };
-
-    await addToHistory(dbEntry);
-
-    toast({ title: 'Success', description: 'Transposition complete!' });
   };
-
-  const handleScaleTranspose = async () => {
-    if (!notesInput.trim() || !fromScale || !toScale) {
-      return toast({
-        title: 'Error',
-        description: 'Please enter all fields',
-        variant: 'destructive',
-      });
-    }
-
-    const semitonesNum = transposer.calculateSemitoneDifferenceWestern(fromScale, toScale);
-    if (semitonesNum === null || isNaN(semitonesNum)) {
-      return toast({
-        title: 'Error',
-        description: 'Invalid scale conversion',
-        variant: 'destructive',
-      });
-    }
-
-    const originalNotes = notesInput.trim().split(/\s+/);
-    const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
-    const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
-
-    const newResult = {
-      original: originalNotes,
-      transposed: transposedNotes,
-      transposedFormatted,
-      semitones: semitonesNum,
-      fromScale,
-      toScale,
-    };
-
-    setResult(newResult);
-
-    const dbEntry = {
-      type: 'scale' as const,
-      originalNotes,
-      transposedNotes,
-      originalFormatted: notesInput,
-      transposedFormatted,
-      semitones: semitonesNum,
-      fromScale,
-      toScale,
-    };
-
-    await addToHistory(dbEntry);
-
-    toast({ title: 'Success', description: 'Scale transposed successfully!' });
-  };
-
+  
   const copyToClipboard = async () => {
     if (!result?.transposedFormatted) return;
-
     const text = result.transposedFormatted;
-
     try {
       await navigator.clipboard.writeText(text);
-      toast({
-        title: 'Copied!',
-        description: 'Transposed notes copied to clipboard.',
-      });
+      toast({ title: 'Copied!', description: 'Transposed notes copied to clipboard.' });
     } catch (err) {
       const textarea = document.createElement('textarea');
       textarea.value = text;
@@ -172,37 +125,21 @@ const TransposerForm: React.FC = () => {
       document.body.appendChild(textarea);
       textarea.focus();
       textarea.select();
-
       try {
         const successful = document.execCommand('copy');
-        document.body.removeChild(textarea);
-        if (successful) {
-          toast({
-            title: 'Copied!',
-            description: 'Copied using fallback method.',
-          });
-        } else {
-          throw new Error();
-        }
+        if (!successful) throw new Error();
+        toast({ title: 'Copied!', description: 'Copied using fallback method.' });
       } catch (e) {
-        document.body.removeChild(textarea);
-        toast({
-          title: 'Failed to copy',
-          description: 'Clipboard access was denied.',
-          variant: 'destructive',
-        });
+        toast({ title: 'Failed to copy', variant: 'destructive' });
       }
+      document.body.removeChild(textarea);
     }
   };
 
   const clearForm = () => {
-    setNotesInput('');
-    setSemitones('');
-    setFromScale('');
-    setToScale('');
-    setResult(null);
+    setNotesInput(''); setSemitones(''); setFromScale(''); setToScale(''); setResult(null);
   };
-
+  
   const availableWesternNotes = transposer.getAvailableWesternNotes();
 
   return (
@@ -237,7 +174,7 @@ const TransposerForm: React.FC = () => {
                 placeholder="+2, -1"
                 className="w-full bg-white/10 border border-white/20 text-white p-2 rounded"
               />
-              <Button className="w-full musical-gradient" onClick={handleSemitoneTranspose}>
+              <Button className="w-full musical-gradient" onClick={() => performTranspose('semitone')}>
                 Transpose by Semitones
               </Button>
             </TabsContent>
@@ -251,8 +188,9 @@ const TransposerForm: React.FC = () => {
                 placeholder="e.g. S R G M P D N"
                 className="w-full resize-y bg-white/10 border border-white/20 text-white p-2 rounded"
               />
-              <div className="grid md:grid-cols-2 gap-4">
-                <div>
+              {/* 3. RESTORE THE FLEXBOX LAYOUT FOR THE SWAP BUTTON */}
+              <div className="flex items-end gap-2">
+                <div className="flex-1 space-y-1">
                   <Label className="text-white">From Scale</Label>
                   <Select value={fromScale} onValueChange={setFromScale}>
                     <SelectTrigger>
@@ -260,12 +198,23 @@ const TransposerForm: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {availableWesternNotes.map(note => (
-                        <SelectItem key={note} value={note}>{note}</SelectItem>
+                        <SelectItem key={`from-${note}`} value={note}>{note}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <div>
+                
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handleSwapScales} 
+                  className="shrink-0 text-white hover:bg-white/20"
+                  aria-label="Swap scales"
+                >
+                  <ArrowRightLeft className="w-4 h-4"/>
+                </Button>
+
+                <div className="flex-1 space-y-1">
                   <Label className="text-white">To Scale</Label>
                   <Select value={toScale} onValueChange={setToScale}>
                     <SelectTrigger>
@@ -273,13 +222,13 @@ const TransposerForm: React.FC = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {availableWesternNotes.map(note => (
-                        <SelectItem key={note} value={note}>{note}</SelectItem>
+                        <SelectItem key={`to-${note}`} value={note}>{note}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
-              <Button className="w-full musical-gradient" onClick={handleScaleTranspose}>
+              <Button className="w-full musical-gradient" onClick={() => performTranspose('scale')}>
                 Transpose by Scale
               </Button>
             </TabsContent>
