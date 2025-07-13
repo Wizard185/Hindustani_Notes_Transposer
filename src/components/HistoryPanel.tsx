@@ -124,8 +124,6 @@ const HistoryPanel: React.FC = () => {
     }
   };
 
-  // Export handlers (exportToPDF, exportToDocx) go here — unchanged unless requested
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -144,6 +142,8 @@ const HistoryPanel: React.FC = () => {
       ) : (
         history.map((entry) => {
           const previewText = `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`;
+          const transposedOnlyText = entry.transposedNotes.join('\n');
+
           return (
             <Card key={entry.id} className="mb-6 relative">
               <CardContent className="p-4">
@@ -180,7 +180,14 @@ const HistoryPanel: React.FC = () => {
                     size="sm"
                     onClick={() => handleCopyToClipboard(previewText)}
                   >
-                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy to Clipboard
+                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy Preview
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyToClipboard(transposedOnlyText)}
+                  >
+                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy Transposed Notes
                   </Button>
                   {!isMobile && (
                     <>
