@@ -1,3 +1,4 @@
+// utils/transposer.ts
 
 export class HindustaniTransposer {
   private chromatic_scale = [
@@ -47,7 +48,7 @@ export class HindustaniTransposer {
   calculateSemitoneDifferenceWestern(fromNote: string, toNote: string): number {
     const fromIndex = this.getWesternIndex(fromNote);
     const toIndex = this.getWesternIndex(toNote);
-    return fromIndex - toIndex;
+    return toIndex - fromIndex;
   }
 
   transposeNote(note: string, semitones: number): string {
@@ -56,9 +57,15 @@ export class HindustaniTransposer {
     return this.chromatic_scale[newIndex];
   }
 
-  transposeSequence(notes: string | string[], semitones: number): string[] {
+  transposeWesternNote(note: string, semitones: number): string {
+    const currentIndex = this.getWesternIndex(note);
+    const newIndex = (currentIndex + semitones + 12) % 12;
+    return this.western_notes[newIndex];
+  }
+
+  transposeSequence(notes: string[] | string, semitones: number, useWestern = false): string[] {
     let noteArray: string[];
-    
+
     if (typeof notes === 'string') {
       noteArray = notes.replace(/,/g, ' ').split(/\s+/).filter(note => note.trim());
     } else {
@@ -70,7 +77,9 @@ export class HindustaniTransposer {
       const trimmedNote = note.trim();
       if (trimmedNote) {
         try {
-          const transposedNote = this.transposeNote(trimmedNote, semitones);
+          const transposedNote = useWestern
+            ? this.transposeWesternNote(trimmedNote, semitones)
+            : this.transposeNote(trimmedNote, semitones);
           transposed.push(transposedNote);
         } catch (error) {
           console.warn(`Warning: ${error}`);

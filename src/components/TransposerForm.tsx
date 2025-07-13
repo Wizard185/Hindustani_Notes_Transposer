@@ -1,4 +1,5 @@
-import React from 'react';
+// components/TransposerForm.tsx
+import React, { useState } from 'react';
 import {
   Card,
   CardContent,
@@ -15,10 +16,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { transposer } from '@/utils/transposer';
-// 1. ADD ArrowRightLeft ICON BACK
 import { Music2, RotateCcw, ClipboardCopy, ArrowRightLeft } from 'lucide-react';
 
 export type TransposerResult = {
@@ -52,18 +53,18 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
 }) => {
   const { addToHistory } = useAuth();
   const { toast } = useToast();
+  const [useWestern, setUseWestern] = useState(false);
 
-  // 2. ADD THE HANDLER FUNCTION BACK
   const handleSwapScales = () => {
     setFromScale(toScale);
     setToScale(fromScale);
   };
-  
+
   const preserveFormatting = (input: string, transposedNotes: string[]) => {
     if (!Array.isArray(transposedNotes)) return "Error: Transposition failed.";
     const lines = input.split('\n');
     let noteIndex = 0;
-    return lines.map(line => 
+    return lines.map(line =>
       line.split(/(\s+)/).map(word => {
         if (word.trim() && !/^\s+$/.test(word) && noteIndex < transposedNotes.length) {
           return transposedNotes[noteIndex++];
@@ -72,7 +73,7 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
       }).join('')
     ).join('\n');
   };
-  
+
   const performTranspose = async (type: 'semitone' | 'scale') => {
     try {
       if (!notesInput.trim()) return toast({ title: 'Input Missing', description: 'Please enter notes to transpose.', variant: 'destructive' });
@@ -86,9 +87,9 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
         semitonesNum = transposer.calculateSemitoneDifferenceWestern(fromScale, toScale);
         if (semitonesNum === null) return toast({ title: 'Error', description: 'Invalid scale conversion.', variant: 'destructive' });
       }
-      
+
       const originalNotes = notesInput.trim().split(/\s+/);
-      const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum);
+      const transposedNotes = transposer.transposeSequence(originalNotes, semitonesNum, useWestern);
       if (!transposedNotes || !Array.isArray(transposedNotes)) throw new Error("Transposition function failed.");
 
       const transposedFormatted = preserveFormatting(notesInput, transposedNotes);
@@ -110,7 +111,7 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
       toast({ title: 'An Error Occurred', description: error instanceof Error ? error.message : 'Unknown error.', variant: 'destructive' });
     }
   };
-  
+
   const copyToClipboard = async () => {
     if (!result?.transposedFormatted) return;
     const text = result.transposedFormatted;
@@ -139,7 +140,7 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
   const clearForm = () => {
     setNotesInput(''); setSemitones(''); setFromScale(''); setToScale(''); setResult(null);
   };
-  
+
   const availableWesternNotes = transposer.getAvailableWesternNotes();
 
   return (
@@ -151,6 +152,15 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
+          <div className="flex items-center justify-between mb-2">
+            <Label className="text-white">{useWestern ? 'Western Notes' : 'Hindustani Notes'}</Label>
+            <div className="flex items-center gap-2">
+              <Label className="text-white text-sm">Hindustani</Label>
+              <Switch checked={useWestern} onCheckedChange={setUseWestern} />
+              <Label className="text-white text-sm">Western</Label>
+            </div>
+          </div>
+
           <Tabs defaultValue="semitone">
             <TabsList className="grid grid-cols-2 bg-white/10">
               <TabsTrigger value="semitone">By Semitones</TabsTrigger>
@@ -158,12 +168,11 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
             </TabsList>
 
             <TabsContent value="semitone" className="space-y-4 mt-4">
-              <Label className="text-white">Hindustani Notes</Label>
               <textarea
                 rows={5}
                 value={notesInput}
                 onChange={(e) => setNotesInput(e.target.value)}
-                placeholder="e.g. S R G M P D N"
+                placeholder={useWestern ? "e.g. C D E F G A B" : "e.g. S R G M P D N"}
                 className="w-full resize-y bg-white/10 border border-white/20 text-white p-2 rounded"
               />
               <Label className="text-white">Semitones (+/-)</Label>
@@ -180,15 +189,13 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
             </TabsContent>
 
             <TabsContent value="scale" className="space-y-4 mt-4">
-              <Label className="text-white">Hindustani Notes</Label>
               <textarea
                 rows={5}
                 value={notesInput}
                 onChange={(e) => setNotesInput(e.target.value)}
-                placeholder="e.g. S R G M P D N"
+                placeholder={useWestern ? "e.g. C D E F G A B" : "e.g. S R G M P D N"}
                 className="w-full resize-y bg-white/10 border border-white/20 text-white p-2 rounded"
               />
-              {/* 3. RESTORE THE FLEXBOX LAYOUT FOR THE SWAP BUTTON */}
               <div className="flex items-end gap-2">
                 <div className="flex-1 space-y-1">
                   <Label className="text-white">From Scale</Label>
@@ -203,17 +210,9 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
                     </SelectContent>
                   </Select>
                 </div>
-                
-                <Button 
-                  variant="ghost" 
-                  size="icon" 
-                  onClick={handleSwapScales} 
-                  className="shrink-0 text-white hover:bg-white/20"
-                  aria-label="Swap scales"
-                >
+                <Button variant="ghost" size="icon" onClick={handleSwapScales} className="shrink-0 text-white hover:bg-white/20" aria-label="Swap scales">
                   <ArrowRightLeft className="w-4 h-4"/>
                 </Button>
-
                 <div className="flex-1 space-y-1">
                   <Label className="text-white">To Scale</Label>
                   <Select value={toScale} onValueChange={setToScale}>
@@ -264,7 +263,6 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
                 <span>Scale: {result.fromScale} → {result.toScale}</span>
               )}
             </div>
-
             <Button variant="ghost" className="text-white mt-2" onClick={copyToClipboard}>
               <ClipboardCopy className="h-4 w-4 mr-2" />
               Copy Transposed Notes
