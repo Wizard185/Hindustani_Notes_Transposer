@@ -1,15 +1,22 @@
+// components/HistoryPanel.tsx
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, Music, ArrowRight, Share2, X } from 'lucide-react';
+import { Trash2, Music, ArrowRight, Share2, X, Loader2, Download } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/supabase/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { jsPDF } from 'jspdf';
-import { Document, Packer, Paragraph } from 'docx';
-import { saveAs } from 'file-saver';
+import { Document, Packer, Paragraph, TextRun } from 'docx';
 
+// --- Types ---
 type HistoryEntry = {
   id: number;
   type: 'semitone' | 'scale';
@@ -21,316 +28,247 @@ type HistoryEntry = {
   timestamp: string;
 };
 
+const formatDate = (timestamp: string) =>
+  new Intl.DateTimeFormat('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(timestamp));
+
 const HistoryPanel: React.FC = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
-  const [sharingEntryId, setSharingEntryId] = useState<number | null>(null);
-
-  const { toast } = useToast();
-  const { user } = useAuth();
-
-  const formatDate = (timestamp: string) =>
-    new Intl.DateTimeFormat('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    }).format(new Date(timestamp));
-
-  const generateFilename = (entry: HistoryEntry, ext: string) =>
-    `transposed-notes-${entry.id}.${ext}`;
-
-  const fetchHistory = async () => {
-    if (!user?.email) return;
-
-    setLoading(true);
-    const { data, error } = await supabase
-      .from('transposition_history')
-      .select('*')
-      .eq('user_email', user.email)
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      toast({
-        title: 'Error loading history',
-        description: error.message,
-        variant: 'destructive',
-      });
-    } else {
-      const parsed = (data || []).map((entry): HistoryEntry => ({
-        id: entry.id,
-        type: entry.type,
-        originalNotes: typeof entry.original_notes === 'string' ? entry.original_notes.split(/\s+/) : [],
-        transposedNotes: typeof entry.transposed_notes === 'string' ? entry.transposed_notes.split(/\s+/) : [],
-        semitones: entry.semitones,
-        fromScale: entry.from_scale,
-        toScale: entry.to_scale,
-        timestamp: entry.created_at,
-      }));
-      setHistory(parsed);
-    }
-
-    setLoading(false);
-  };
+  const [deletingId, setDeletingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!user?.email) return;
-    fetchHistory();
 
-    const subscription = supabase
-      .channel('history-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'transposition_history',
-          filter: `user_email=eq.${user.email}`,
-        },
-        fetchHistory
-      )
-      .subscribe();
+    const fetchHistory = async () => {
+      setLoading(true);
+      const { data, error } = await supabase
+        .from('transposition_history')
+        .select('*')
+        .eq('user_email', user.email)
+        .order('created_at', { ascending: false });
 
-    return () => {
-      subscription.unsubscribe();
+      if (error) {
+        toast({ title: 'Error loading history', description: error.message, variant: 'destructive' });
+      } else {
+        const parsed = (data || []).map((entry): HistoryEntry => ({
+          id: entry.id,
+          type: entry.type,
+          originalNotes: typeof entry.original_formatted === 'string' ? entry.original_formatted.split('\n') : [],
+          transposedNotes: typeof entry.transposed_formatted === 'string' ? entry.transposed_formatted.split('\n') : [],
+          semitones: entry.semitones,
+          fromScale: entry.from_scale,
+          toScale: entry.to_scale,
+          timestamp: entry.created_at,
+        }));
+        setHistory(parsed);
+      }
+      setLoading(false);
     };
+
+    fetchHistory();
   }, [user?.email]);
 
-  const handleClearHistory = () => setClearDialogOpen(true);
-  const confirmDeleteAll = async () => {
-    await supabase.from('transposition_history').delete().match({ user_email: user?.email });
-    toast({ title: 'History Cleared' });
-    fetchHistory();
-    setClearDialogOpen(false);
-  };
-
-  const handleIndividualDelete = async (id: number) => {
-    await supabase.from('transposition_history').delete().eq('id', id);
-    toast({ title: 'Deleted!' });
-    fetchHistory();
-  };
-
-  const handleShare = async (blob: Blob, filename: string, title: string) => {
-    const file = new File([blob], filename, { type: blob.type });
-
-    try {
-      if (
-        navigator.canShare &&
-        navigator.canShare({ files: [file] }) &&
-        typeof navigator.share === 'function'
-      ) {
-        await navigator.share({
-          files: [file],
-          title,
-          text: 'Your transposed music file',
-        });
-      } else {
-        saveAs(blob, filename); // fallback to download
-      }
-    } catch (err) {
-      console.error('Share error:', err);
-      toast({
-        title: 'Export Failed',
-        description: (err as Error).message,
-        variant: 'destructive',
-      });
-    }
-  };
-
-  const exportToPDF = async (entry: HistoryEntry) => {
-    toast({ title: 'Generating PDF...' });
-
+  const generatePDF = (entry: HistoryEntry) => {
     const doc = new jsPDF();
-    let y = 10;
+    let y = 20;
 
-    doc.setFont('Courier', 'normal');
-    doc.text(`Exported: ${formatDate(entry.timestamp)}`, 10, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(14);
+    doc.text('Transposition Export', 20, y);
+    y += 10;
+
+    doc.setFontSize(10);
+    doc.text(`Generated: ${formatDate(entry.timestamp)}`, 20, y);
     y += 10;
 
     if (entry.type === 'scale') {
-      doc.text(`Scale: ${entry.fromScale} → ${entry.toScale}`, 10, y);
-      y += 10;
+      doc.text(`Scale: ${entry.fromScale} → ${entry.toScale}`, 20, y);
     } else {
-      doc.text(`Interval: ${entry.semitones} semitones`, 10, y);
-      y += 10;
+      doc.text(`Semitones: ${entry.semitones}`, 20, y);
     }
+    y += 15;
 
-    doc.text('Original:', 10, y);
+    doc.setFont('courier', 'normal');
+    doc.setFontSize(12);
+    doc.text('Original Notes:', 20, y);
     y += 8;
-    doc.text(entry.originalNotes.join(' '), 10, y);
-    y += 10;
-
-    doc.text('Transposed:', 10, y);
+    doc.text(entry.originalNotes.join('\n'), 20, y);
+    y += entry.originalNotes.length * 7 + 8;
+    doc.text('Transposed Notes:', 20, y);
     y += 8;
-    doc.text(entry.transposedNotes.join(' '), 10, y);
+    doc.text(entry.transposedNotes.join('\n'), 20, y);
 
-    const blob = doc.output('blob');
-    await handleShare(blob, generateFilename(entry, 'pdf'), 'Transposition PDF');
+    y += entry.transposedNotes.length * 7 + 10;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(14);
+    doc.text('Generated by Notes Transposer', 20, y);
+
+    return doc.output('blob');
   };
 
-  const exportToDocx = async (entry: HistoryEntry) => {
-    toast({ title: 'Generating Word file...' });
-
-    const paragraphs = [
-      new Paragraph(`Exported: ${formatDate(entry.timestamp)}`),
-      new Paragraph(
-        entry.type === 'scale'
-          ? `Scale: ${entry.fromScale} → ${entry.toScale}`
-          : `Interval: ${entry.semitones} semitones`
-      ),
-      new Paragraph(''),
-      new Paragraph('Original Notes:'),
-      new Paragraph(entry.originalNotes.join(' ')),
-      new Paragraph(''),
-      new Paragraph('Transposed Notes:'),
-      new Paragraph(entry.transposedNotes.join(' ')),
-    ];
-
-    const doc = new Document({ sections: [{ children: paragraphs }] });
-    const blob = await Packer.toBlob(doc);
-    await handleShare(blob, generateFilename(entry, 'docx'), 'Transposition DOCX');
+  const generateDOCX = (entry: HistoryEntry) => {
+    const doc = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({ children: [new TextRun({ text: 'Transposition Export', bold: true, size: 28 })] }),
+            new Paragraph({ text: '' }),
+            new Paragraph({ children: [new TextRun({ text: `Generated: ${formatDate(entry.timestamp)}` })] }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text:
+                    entry.type === 'scale'
+                      ? `Scale: ${entry.fromScale} → ${entry.toScale}`
+                      : `Semitones: ${entry.semitones}`,
+                }),
+              ],
+            }),
+            new Paragraph({ text: '' }),
+            new Paragraph({ children: [new TextRun({ text: 'Original Notes:', bold: true })] }),
+            ...entry.originalNotes.map(
+              (line) => new Paragraph({ children: [new TextRun({ text: line, font: 'Courier New' })] })
+            ),
+            new Paragraph({ text: '' }),
+            new Paragraph({ children: [new TextRun({ text: 'Transposed Notes:', bold: true })] }),
+            ...entry.transposedNotes.map(
+              (line) => new Paragraph({ children: [new TextRun({ text: line, font: 'Courier New' })] })
+            ),
+            new Paragraph({ text: '' }),
+            new Paragraph({ children: [new TextRun({ text: 'Generated by Notes Transposer', bold: true })] }),
+          ],
+        },
+      ],
+    });
+    return Packer.toBlob(doc);
   };
 
-  if (loading) return <p className="text-white text-center">Loading history...</p>;
+  const confirmDelete = async (id: number) => {
+    setDeletingId(id);
+    const { error } = await supabase.from('transposition_history').delete().eq('id', id);
+    if (error) {
+      toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'Entry deleted' });
+      setHistory(history.filter((h) => h.id !== id));
+    }
+    setDeletingId(null);
+  };
+
+  const confirmDeleteAll = async () => {
+    const { error } = await supabase.from('transposition_history').delete().eq('user_email', user?.email);
+    if (error) {
+      toast({ title: 'Delete failed', description: error.message, variant: 'destructive' });
+    } else {
+      toast({ title: 'All history deleted' });
+      setHistory([]);
+    }
+    setClearDialogOpen(false);
+  };
 
   return (
-    <>
-      <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-display text-white">Transposition History</h2>
-          <Button variant="ghost" onClick={handleClearHistory} className="text-red-400">
-            <Trash2 className="h-4 w-4 mr-2" />
-            Clear History
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-2xl font-bold text-white">Transposition History</h2>
+        {history.length > 0 && (
+          <Button variant="destructive" size="sm" onClick={() => setClearDialogOpen(true)}>
+            <Trash2 className="h-4 w-4 mr-2" /> Clear All
           </Button>
-        </div>
-
-        {history.length === 0 ? (
-          <p className="text-slate-400 text-center">No history found.</p>
-        ) : (
-          <div className="space-y-4">
-            {history.map((entry) => (
-              <Card key={entry.id} className="glass-card overflow-hidden">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center gap-3">
-                      <Music className="h-5 w-5 text-musical-cyan" />
-                      <div>
-                        <h3 className="font-medium text-white">
-                          {entry.type === 'scale' ? 'Scale Transposition' : 'Semitone Transposition'}
-                        </h3>
-                        <p className="text-sm text-slate-400">{formatDate(entry.timestamp)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-red-400"
-                        onClick={() => handleIndividualDelete(entry.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="text-white"
-                        onClick={() =>
-                          setSharingEntryId((prevId) => (prevId === entry.id ? null : entry.id))
-                        }
-                      >
-                        {sharingEntryId === entry.id ? (
-                          <X className="h-4 w-4" />
-                        ) : (
-                          <Share2 className="h-4 w-4" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-
-                  {sharingEntryId === entry.id ? (
-                    <div className="animate-fade-in space-y-3 pt-4 border-t border-white/10">
-                      <h4 className="text-center text-sm font-medium text-white">
-                        Choose Export Format
-                      </h4>
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        onClick={async () => {
-                          await exportToPDF(entry);
-                          setSharingEntryId(null);
-                        }}
-                      >
-                        Export as PDF
-                      </Button>
-                      <Button
-                        className="w-full"
-                        variant="outline"
-                        onClick={async () => {
-                          await exportToDocx(entry);
-                          setSharingEntryId(null);
-                        }}
-                      >
-                        Export as Word (.docx)
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between gap-4">
-                        <div className="flex-1">
-                          <h4 className="text-sm text-slate-400 mb-2">Original:</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {entry.originalNotes.map((note, i) => (
-                              <span key={i} className="px-2 py-1 bg-white/10 rounded text-white">
-                                {note}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-slate-400" />
-                        <div className="flex-1">
-                          <h4 className="text-sm text-slate-400 mb-2">Transposed:</h4>
-                          <div className="flex flex-wrap gap-2">
-                            {entry.transposedNotes.map((note, i) => (
-                              <span key={i} className="px-2 py-1 bg-musical-purple/20 rounded text-white">
-                                {note}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="pt-3 border-t border-white/20 text-sm text-slate-400">
-                        {entry.type === 'scale'
-                          ? `Scale: ${entry.fromScale} → ${entry.toScale}`
-                          : `Interval: ${entry.semitones} semitones`}
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
         )}
       </div>
+
+      {loading ? (
+        <p className="text-white">Loading...</p>
+      ) : history.length === 0 ? (
+        <p className="text-slate-400">No history found.</p>
+      ) : (
+        history.map((entry) => (
+          <Card key={entry.id} className="mb-6 relative">
+            <CardContent className="p-4">
+              <div className="mb-4 text-sm text-slate-300">{formatDate(entry.timestamp)}</div>
+              <div className="mb-2 font-semibold text-white">
+                {entry.type === 'scale'
+                  ? `Scale: ${entry.fromScale} → ${entry.toScale}`
+                  : `Semitones: ${entry.semitones}`}
+              </div>
+              <div className="flex gap-4">
+                <div className="w-1/2">
+                  <h4 className="text-white mb-1">Original Notes</h4>
+                  <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
+                    {entry.originalNotes.join('\n')}
+                  </pre>
+                </div>
+                <div className="w-1/2">
+                  <h4 className="text-white mb-1">Transposed Notes</h4>
+                  <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
+                    {entry.transposedNotes.join('\n')}
+                  </pre>
+                </div>
+              </div>
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const blob = generatePDF(entry);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `transposition-${entry.id}.pdf`;
+                    a.click();
+                  }}
+                >
+                  Export PDF
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    const blob = await generateDOCX(entry);
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `transposition-${entry.id}.docx`;
+                    a.click();
+                  }}
+                >
+                  Export Word
+                </Button>
+              </div>
+              <Button
+                variant="destructive"
+                size="icon"
+                className="absolute top-2 right-2"
+                disabled={deletingId === entry.id}
+                onClick={() => confirmDelete(entry.id)}
+              >
+                {deletingId === entry.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              </Button>
+            </CardContent>
+          </Card>
+        ))
+      )}
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Clear All History</DialogTitle>
           </DialogHeader>
-          <p>Are you sure? This action cannot be undone.</p>
+          <p>Are you sure you want to delete all transposition history? This action cannot be undone.</p>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={confirmDeleteAll}>
-              Confirm
-            </Button>
+            <Button variant="outline" onClick={() => setClearDialogOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmDeleteAll}>Delete All</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </div>
   );
 };
 
