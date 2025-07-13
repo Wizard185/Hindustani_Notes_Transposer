@@ -2,7 +2,7 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Trash2, Loader2, ClipboardCopy, Eye, X } from 'lucide-react';
+import { Trash2, Loader2, ClipboardCopy, Eye, X, FileText, FileSignature } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/supabase/supabaseClient';
 import { useAuth } from '@/contexts/AuthContext';
@@ -13,6 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { jsPDF } from 'jspdf';
+import { Document, Packer, Paragraph } from 'docx';
+import { saveAs } from 'file-saver';
 
 // --- Types ---
 type HistoryEntry = {
@@ -110,6 +113,52 @@ const HistoryPanel: React.FC = () => {
     }
   };
 
+  const exportToPDF = async (entry: HistoryEntry) => {
+    const doc = new jsPDF();
+    let y = 10;
+    doc.setFont('Courier', 'normal');
+    doc.text(`Exported: ${formatDate(entry.timestamp)}`, 10, y);
+    y += 10;
+    if (entry.type === 'scale') {
+      doc.text(`Scale: ${entry.fromScale} → ${entry.toScale}`, 10, y);
+      y += 10;
+    }
+    doc.text(`Semitones: ${entry.semitones}`, 10, y);
+    y += 10;
+    doc.text('Original:', 10, y);
+    y += 8;
+    doc.text(entry.originalNotes.join('\n'), 10, y);
+    y += entry.originalNotes.length * 6 + 4;
+    doc.text('Transposed:', 10, y);
+    y += 8;
+    doc.text(entry.transposedNotes.join('\n'), 10, y);
+
+    const blob = doc.output('blob');
+    saveAs(blob, `transposition-${entry.id}.pdf`);
+  };
+
+  const exportToDocx = async (entry: HistoryEntry) => {
+    const paragraphs = [
+      new Paragraph(`Exported: ${formatDate(entry.timestamp)}`),
+      new Paragraph(
+        entry.type === 'scale'
+          ? `Scale: ${entry.fromScale} → ${entry.toScale}`
+          : ''
+      ),
+      new Paragraph(`Semitones: ${entry.semitones}`),
+      new Paragraph(''),
+      new Paragraph('Original Notes:'),
+      ...entry.originalNotes.map(line => new Paragraph(line)),
+      new Paragraph(''),
+      new Paragraph('Transposed Notes:'),
+      ...entry.transposedNotes.map(line => new Paragraph(line)),
+    ];
+
+    const doc = new Document({ sections: [{ children: paragraphs }] });
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `transposition-${entry.id}.docx`);
+  };
+
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -126,78 +175,87 @@ const HistoryPanel: React.FC = () => {
       ) : history.length === 0 ? (
         <p className="text-slate-400">No history found.</p>
       ) : (
-        history.map((entry) => (
-          <Card key={entry.id} className="mb-6 relative">
-            <CardContent className="p-4">
-              <div className="mb-4 text-sm text-slate-300">{formatDate(entry.timestamp)}</div>
-              <div className="mb-2 font-semibold text-white">
-                {entry.type === 'scale'
-                  ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}`
-                  : `Semitones: ${entry.semitones}`}
-              </div>
-              <div className="flex gap-4">
-                <div className="w-1/2">
-                  <h4 className="text-white mb-1">Original Notes</h4>
-                  <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
-                    {entry.originalNotes.join('\n')}
-                  </pre>
+        history.map((entry) => {
+          const previewText = `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`;
+          return (
+            <Card key={entry.id} className="mb-6 relative">
+              <CardContent className="p-4">
+                <div className="mb-4 text-sm text-slate-300">{formatDate(entry.timestamp)}</div>
+                <div className="mb-2 font-semibold text-white">
+                  {entry.type === 'scale'
+                    ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}`
+                    : `Semitones: ${entry.semitones}`}
                 </div>
-                <div className="w-1/2">
-                  <h4 className="text-white mb-1">Transposed Notes</h4>
-                  <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
-                    {entry.transposedNotes.join('\n')}
-                  </pre>
-                </div>
-              </div>
-              <div className="mt-4 flex gap-2 flex-wrap">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => setPreviewId(previewId === entry.id ? null : entry.id)}
-                >
-                  <Eye className="h-4 w-4 mr-1" /> Preview
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleCopyToClipboard(
-                    `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}` +
-                    `Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`
-                  )}
-                >
-                  <ClipboardCopy className="h-4 w-4 mr-1" /> Copy to Clipboard
-                </Button>
-              </div>
-              {previewId === entry.id && (
-                <div className="mt-4 relative border border-white/20 rounded-lg">
-                  <button
-                    className="absolute top-2 right-2 text-white hover:text-red-400"
-                    onClick={() => setPreviewId(null)}
-                  >
-                    <X className="h-4 w-4" />
-                  </button>
-                  <div className="bg-gray-800 text-white p-4 rounded font-mono text-sm whitespace-pre-wrap">
-                    {`${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}` +
-                      `Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`}
+                <div className="flex gap-4">
+                  <div className="w-1/2">
+                    <h4 className="text-white mb-1">Original Notes</h4>
+                    <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
+                      {entry.originalNotes.join('\n')}
+                    </pre>
+                  </div>
+                  <div className="w-1/2">
+                    <h4 className="text-white mb-1">Transposed Notes</h4>
+                    <pre className="bg-gray-900 text-white p-2 rounded text-sm whitespace-pre-wrap font-mono">
+                      {entry.transposedNotes.join('\n')}
+                    </pre>
                   </div>
                 </div>
-              )}
-              <Button
-                variant="destructive"
-                size="icon"
-                className="absolute top-2 right-2"
-                disabled={deletingId === entry.id}
-                onClick={() => confirmDelete(entry.id)}
-              >
-                {deletingId === entry.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Trash2 className="h-4 w-4" />
+                <div className="mt-4 flex gap-2 flex-wrap">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPreviewId(previewId === entry.id ? null : entry.id)}
+                  >
+                    <Eye className="h-4 w-4 mr-1" /> Preview
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCopyToClipboard(previewText)}
+                  >
+                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy to Clipboard
+                  </Button>
+                  {!isMobile && (
+                    <>
+                      <Button variant="ghost" size="sm" onClick={() => exportToPDF(entry)}>
+                        <FileSignature className="h-4 w-4 mr-1" /> Export as PDF
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => exportToDocx(entry)}>
+                        <FileText className="h-4 w-4 mr-1" /> Export as Word
+                      </Button>
+                    </>
+                  )}
+                </div>
+                {previewId === entry.id && (
+                  <div className="mt-4 relative border border-white/20 rounded-lg">
+                    <button
+                      className="absolute top-2 right-2 text-white hover:text-red-400"
+                      onClick={() => setPreviewId(null)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                    <div className="bg-gray-800 text-white p-4 rounded font-mono text-sm whitespace-pre-wrap">
+                      {previewText}
+                    </div>
+                  </div>
                 )}
-              </Button>
-            </CardContent>
-          </Card>
-        ))
+                <Button
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2"
+                  disabled={deletingId === entry.id}
+                  onClick={() => confirmDelete(entry.id)}
+                >
+                  {deletingId === entry.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          );
+        })
       )}
 
       <Dialog open={clearDialogOpen} onOpenChange={setClearDialogOpen}>
