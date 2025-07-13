@@ -132,7 +132,7 @@ const HistoryPanel: React.FC = () => {
               <div className="mb-4 text-sm text-slate-300">{formatDate(entry.timestamp)}</div>
               <div className="mb-2 font-semibold text-white">
                 {entry.type === 'scale'
-                  ? `Scale: ${entry.fromScale} → ${entry.toScale}`
+                  ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}`
                   : `Semitones: ${entry.semitones}`}
               </div>
               <div className="flex gap-4">
@@ -161,7 +161,7 @@ const HistoryPanel: React.FC = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleCopyToClipboard(
-                    `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale}\n\n` : ''}` +
+                    `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}` +
                     `Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`
                   )}
                 >
@@ -177,7 +177,7 @@ const HistoryPanel: React.FC = () => {
                     <X className="h-4 w-4" />
                   </button>
                   <div className="bg-gray-800 text-white p-4 rounded font-mono text-sm whitespace-pre-wrap">
-                    {`${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale}\n\n` : ''}` +
+                    {`${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}` +
                       `Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`}
                   </div>
                 </div>
