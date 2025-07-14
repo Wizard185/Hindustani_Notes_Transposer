@@ -1,4 +1,4 @@
-// App.tsx
+// src/App.tsx
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -7,6 +7,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+import ContactPage from "./pages/ContactPage";      // ✅ ADD THIS
+import InstructionsPage from "./pages/InstructionsPage"; // ✅ ADD THIS
 
 const queryClient = new QueryClient();
 
@@ -19,6 +21,8 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
+            <Route path="/contact" element={<ContactPage />} />         {/* ✅ REGISTER CONTACT PAGE */}
+            <Route path="/instructions" element={<InstructionsPage />} /> {/* ✅ REGISTER INSTRUCTIONS PAGE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
