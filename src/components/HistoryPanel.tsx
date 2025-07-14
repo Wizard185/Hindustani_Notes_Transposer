@@ -38,6 +38,37 @@ const formatDate = (timestamp: string) =>
     minute: '2-digit',
   }).format(new Date(timestamp));
 
+const fallbackCopyToClipboard = (text: string) => {
+  const textArea = document.createElement('textarea');
+  textArea.value = text;
+  textArea.style.position = 'fixed';
+  textArea.style.top = '0';
+  textArea.style.left = '0';
+  textArea.style.opacity = '0';
+  document.body.appendChild(textArea);
+  textArea.focus();
+  textArea.select();
+  try {
+    document.execCommand('copy');
+  } catch (err) {
+    console.error('Fallback: Copy command failed', err);
+  }
+  document.body.removeChild(textArea);
+};
+
+const handleCopyToClipboard = async (text: string, toast: any) => {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      fallbackCopyToClipboard(text);
+    }
+    toast({ title: 'Copied to clipboard' });
+  } catch (error) {
+    toast({ title: 'Copy failed', description: 'Unable to copy text.', variant: 'destructive' });
+  }
+};
+
 const HistoryPanel: React.FC = () => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -48,6 +79,7 @@ const HistoryPanel: React.FC = () => {
   const [previewId, setPreviewId] = useState<number | null>(null);
 
   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  
 
   useEffect(() => {
     if (!user?.email) return;
@@ -103,17 +135,7 @@ const HistoryPanel: React.FC = () => {
     }
     setClearDialogOpen(false);
   };
-
-  const handleCopyToClipboard = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied to clipboard' });
-    } catch (error) {
-      toast({ title: 'Copy failed', description: 'Unable to copy text.', variant: 'destructive' });
-    }
-  };
-
-  const exportToPDF = async (entry: HistoryEntry) => {
+const exportToPDF = async (entry: HistoryEntry) => {
     const doc = new jsPDF();
     let y = 20;
     const pageHeight = doc.internal.pageSize.height;
@@ -390,7 +412,6 @@ const HistoryPanel: React.FC = () => {
     const blob = await Packer.toBlob(doc);
     saveAs(blob, `transposition-${entry.id}.docx`);
   };
-
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-4">
@@ -409,6 +430,7 @@ const HistoryPanel: React.FC = () => {
       ) : (
         history.map((entry) => {
           const previewText = `${entry.type === 'scale' ? `Scale: ${entry.fromScale} → ${entry.toScale} | Semitones: ${entry.semitones}\n\n` : `Semitones: ${entry.semitones}\n\n`}Original Notes:\n${entry.originalNotes.join('\n')}\n\nTransposed Notes:\n${entry.transposedNotes.join('\n')}`;
+          const transposedText = entry.transposedNotes.join('\n');
           return (
             <Card key={entry.id} className="mb-6 relative">
               <CardContent className="p-4">
@@ -433,19 +455,14 @@ const HistoryPanel: React.FC = () => {
                   </div>
                 </div>
                 <div className="mt-4 flex gap-2 flex-wrap">
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setPreviewId(previewId === entry.id ? null : entry.id)}
-                  >
+                  <Button variant="secondary" size="sm" onClick={() => setPreviewId(previewId === entry.id ? null : entry.id)}>
                     <Eye className="h-4 w-4 mr-1" /> Preview
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCopyToClipboard(previewText)}
-                  >
-                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy to Clipboard
+                  <Button variant="ghost" size="sm" onClick={() => handleCopyToClipboard(previewText, toast)}>
+                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy Preview
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleCopyToClipboard(transposedText, toast)}>
+                    <ClipboardCopy className="h-4 w-4 mr-1" /> Copy Transposed Notes
                   </Button>
                   {!isMobile && (
                     <>

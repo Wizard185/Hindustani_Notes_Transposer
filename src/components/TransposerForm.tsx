@@ -1,5 +1,5 @@
 // components/TransposerForm.tsx
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Card,
   CardContent,
@@ -20,7 +20,7 @@ import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { transposer } from '@/utils/transposer';
-import { Music2, RotateCcw, ClipboardCopy, ArrowRightLeft } from 'lucide-react';
+import { Music2, RotateCcw, ArrowRightLeft, ClipboardCopy } from 'lucide-react';
 
 export type TransposerResult = {
   original: string[];
@@ -54,6 +54,15 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
   const { addToHistory } = useAuth();
   const { toast } = useToast();
   const [useWestern, setUseWestern] = useState(false);
+
+  useEffect(() => {
+    const savedWestern = localStorage.getItem('useWestern');
+    if (savedWestern) setUseWestern(savedWestern === 'true');
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('useWestern', String(useWestern));
+  }, [useWestern]);
 
   const handleSwapScales = () => {
     setFromScale(toScale);
@@ -109,31 +118,6 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
     } catch (error) {
       console.error("Transposition Failed:", error);
       toast({ title: 'An Error Occurred', description: error instanceof Error ? error.message : 'Unknown error.', variant: 'destructive' });
-    }
-  };
-
-  const copyToClipboard = async () => {
-    if (!result?.transposedFormatted) return;
-    const text = result.transposedFormatted;
-    try {
-      await navigator.clipboard.writeText(text);
-      toast({ title: 'Copied!', description: 'Transposed notes copied to clipboard.' });
-    } catch (err) {
-      const textarea = document.createElement('textarea');
-      textarea.value = text;
-      textarea.style.position = 'fixed';
-      textarea.style.opacity = '0';
-      document.body.appendChild(textarea);
-      textarea.focus();
-      textarea.select();
-      try {
-        const successful = document.execCommand('copy');
-        if (!successful) throw new Error();
-        toast({ title: 'Copied!', description: 'Copied using fallback method.' });
-      } catch (e) {
-        toast({ title: 'Failed to copy', variant: 'destructive' });
-      }
-      document.body.removeChild(textarea);
     }
   };
 
@@ -263,7 +247,33 @@ const TransposerForm: React.FC<TransposerFormProps> = ({
                 <span>Scale: {result.fromScale} → {result.toScale}</span>
               )}
             </div>
-            <Button variant="ghost" className="text-white mt-2" onClick={copyToClipboard}>
+            <Button
+              variant="ghost"
+              className="text-white mt-2"
+              onClick={async () => {
+                if (!result.transposedFormatted) return;
+                try {
+                  await navigator.clipboard.writeText(result.transposedFormatted);
+                  toast({ title: 'Copied!', description: 'Transposed notes copied to clipboard.' });
+                } catch {
+                  const textarea = document.createElement('textarea');
+                  textarea.value = result.transposedFormatted;
+                  textarea.style.position = 'fixed';
+                  textarea.style.opacity = '0';
+                  document.body.appendChild(textarea);
+                  textarea.focus();
+                  textarea.select();
+                  try {
+                    const successful = document.execCommand('copy');
+                    if (!successful) throw new Error();
+                    toast({ title: 'Copied!', description: 'Copied using fallback method.' });
+                  } catch {
+                    toast({ title: 'Failed to copy', variant: 'destructive' });
+                  }
+                  document.body.removeChild(textarea);
+                }
+              }}
+            >
               <ClipboardCopy className="h-4 w-4 mr-2" />
               Copy Transposed Notes
             </Button>
