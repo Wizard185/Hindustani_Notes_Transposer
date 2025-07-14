@@ -184,7 +184,7 @@ const exportToPDF = async (entry: HistoryEntry) => {
     y += 10;
     
     // Original Notes section
-    addTextWithPageBreak('♪ Original Notes:', 20, { fontSize: 14, fontStyle: 'bold' });
+    addTextWithPageBreak(' Original Notes:', 20, { fontSize: 14, fontStyle: 'bold' });
     
     // Add original notes with proper spacing and page break handling
     doc.setFont('Times', 'normal');
