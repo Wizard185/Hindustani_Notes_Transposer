@@ -29,7 +29,6 @@ const App = () => (
             <Route path="*" element={<NotFound />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset-password" element={<ResetPassword />} />
-            <Route path="/auth/callback" element={<UpdatePasswordForm />} />
             <Route path="/update-password" element={<UpdatePasswordForm />} />
           </Routes>
         </BrowserRouter>
