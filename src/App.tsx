@@ -9,6 +9,9 @@ import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 import ContactPage from "./pages/ContactPage";      // ✅ ADD THIS
 import InstructionsPage from "./pages/InstructionsPage"; // ✅ ADD THIS
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
+import UpdatePasswordForm from '@/components/UpdatePasswordForm';
 
 const queryClient = new QueryClient();
 
@@ -24,6 +27,9 @@ const App = () => (
             <Route path="/contact" element={<ContactPage />} />         {/* ✅ REGISTER CONTACT PAGE */}
             <Route path="/instructions" element={<InstructionsPage />} /> {/* ✅ REGISTER INSTRUCTIONS PAGE */}
             <Route path="*" element={<NotFound />} />
+            <Route path="/forgot-password" element={<ForgotPassword />} />
+            <Route path="/reset-password" element={<ResetPassword />} />
+            <Route path="/auth/callback" element={<UpdatePasswordForm />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

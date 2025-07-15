@@ -7,16 +7,17 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/supabase/supabaseClient';
 import { Music, UserPlus, LogIn, Mail, ArrowLeft } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 
 const AuthForm: React.FC = () => {
   const [isLogin, setIsLogin] = useState(true);
-  const [isForgotPassword, setIsForgotPassword] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleLoginOrSignup = async () => {
     if (!email.trim() || !password.trim()) {
@@ -49,32 +50,14 @@ const AuthForm: React.FC = () => {
     }
   };
 
-  const handlePasswordReset = async () => {
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      toast({ title: "Error", description: "Please enter a valid email address.", variant: "destructive" });
-      return;
-    }
-    await supabase.auth.resetPasswordForEmail(email);
-    toast({
-      title: "Check your email",
-      description: "If an account with that email exists, we've sent a password reset link.",
-    });
-    setIsForgotPassword(false);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    if (isForgotPassword) {
-      await handlePasswordReset();
-    } else {
-      await handleLoginOrSignup();
-    }
+    await handleLoginOrSignup();
     setLoading(false);
   };
 
   const getTitle = () => {
-    if (isForgotPassword) return 'Reset Password';
     return isLogin ? 'Welcome Back' : 'Create Account';
   };
 
@@ -109,35 +92,19 @@ const AuthForm: React.FC = () => {
                 />
               </div>
 
-              {!isForgotPassword && (
-                <>
-                  <div className="space-y-2">
-                    <Label htmlFor="password" className="text-white">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter your password"
-                      className="bg-white/10 border-white/20 text-white placeholder:text-slate-400"
-                    />
-                  </div>
-                  {isLogin && (
-                    <div className="flex justify-end -mt-2">
-                      <Button
-                        type="button"
-                        variant="link"
-                        className="p-0 h-auto text-sm text-slate-400 hover:text-white"
-                        onClick={() => setIsForgotPassword(true)}
-                      >
-                        Forgot Password?
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )}
+              <div className="space-y-2">
+                <Label htmlFor="password" className="text-white">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="Enter your password"
+                  className="bg-white/10 border-white/20 text-white placeholder:text-slate-400"
+                />
+              </div>
 
-              {!isLogin && !isForgotPassword && (
+              {!isLogin && (
                 <div className="space-y-2">
                   <Label htmlFor="confirmPassword" className="text-white">Confirm Password</Label>
                   <Input
@@ -151,26 +118,29 @@ const AuthForm: React.FC = () => {
                 </div>
               )}
 
+              <div className="flex justify-end -mt-2">
+                <Link
+                  to="/forgot-password"
+                  className="text-sm text-slate-400 hover:text-white"
+                >
+                  Forgot Password?
+                </Link>
+              </div>
+
               <Button type="submit" className="w-full musical-gradient hover:opacity-90 transition-opacity" disabled={loading}>
                 {loading ? 'Processing...' : (
                   <div className="flex items-center justify-center gap-2">
-                    {isForgotPassword ? <Mail className="h-4 w-4" /> : isLogin ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
-                    {isForgotPassword ? 'Send Reset Link' : isLogin ? 'Sign In' : 'Create Account'}
+                    {isLogin ? <LogIn className="h-4 w-4" /> : <UserPlus className="h-4 w-4" />}
+                    {isLogin ? 'Sign In' : 'Create Account'}
                   </div>
                 )}
               </Button>
             </form>
 
             <div className="text-center mt-6">
-              {isForgotPassword ? (
-                <Button variant="ghost" onClick={() => setIsForgotPassword(false)} className="text-slate-400 hover:text-white">
-                  <ArrowLeft className="h-4 w-4 mr-2" /> Back to Sign In
-                </Button>
-              ) : (
-                <Button variant="ghost" onClick={() => setIsLogin(!isLogin)} className="text-slate-400 hover:text-white">
-                  {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
-                </Button>
-              )}
+              <Button variant="ghost" onClick={() => setIsLogin(!isLogin)} className="text-slate-400 hover:text-white">
+                {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
+              </Button>
             </div>
           </CardContent>
         </Card>
