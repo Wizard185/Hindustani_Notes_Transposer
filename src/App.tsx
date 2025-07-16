@@ -12,7 +12,7 @@ import InstructionsPage from "./pages/InstructionsPage"; // ✅ ADD THIS
 import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import UpdatePasswordForm from '@/components/UpdatePasswordForm';
-
+import AuthForm from "./components/AuthForm";
 const queryClient = new QueryClient();
 
 const App = () => (
@@ -31,6 +31,7 @@ const App = () => (
             <Route path="/reset-password" element={<ResetPassword />} />
             <Route path="/auth/callback" element={<UpdatePasswordForm />} />
             <Route path="/update-password" element={<UpdatePasswordForm />} />
+            <Route path="/login" element={<AuthForm />} />
           </Routes>
         </BrowserRouter>
       </AuthProvider>

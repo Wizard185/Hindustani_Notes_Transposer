@@ -1,10 +1,11 @@
 // src/pages/ForgotPassword.tsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail } from 'lucide-react';
+import { Mail, ArrowLeft } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/supabase/supabaseClient';
 
@@ -13,6 +14,7 @@ const ForgotPassword: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -102,6 +104,16 @@ const ForgotPassword: React.FC = () => {
                   Send Reset Link
                 </div>
               )}
+            </Button>
+
+            <Button
+              type="button"
+              variant="ghost"
+              onClick={() => navigate('/login')} // 🔁 change this route if needed
+              className="w-full text-white hover:bg-white/10 mt-2 flex items-center justify-center gap-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Login
             </Button>
           </form>
         </CardContent>
