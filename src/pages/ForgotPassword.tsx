@@ -105,16 +105,6 @@ const ForgotPassword: React.FC = () => {
                 </div>
               )}
             </Button>
-
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => navigate('/login')} // 🔁 change this route if needed
-              className="w-full text-white hover:bg-white/10 mt-2 flex items-center justify-center gap-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Login
-            </Button>
           </form>
         </CardContent>
       </Card>
