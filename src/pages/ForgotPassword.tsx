@@ -1,39 +1,71 @@
 // src/pages/ForgotPassword.tsx
 import React, { useState } from 'react';
-import { supabase } from '@/supabase/supabaseClient';
-import { useToast } from '@/hooks/use-toast';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
 import { Mail } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { useToast } from '@/hooks/use-toast';
+import { supabase } from '@/supabase/supabaseClient';
 
 const ForgotPassword: React.FC = () => {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const handleReset = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    setError(null);
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim()) {
+      setError('Please enter your email.');
+      return;
+    }
+    if (!emailRegex.test(email)) {
+      setError('Please enter a valid email address.');
+      return;
+    }
+
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`
+
+    // Check if email is registered using invalid login trick
+    const { error: loginError } = await supabase.auth.signInWithPassword({
+      email,
+      password: 'this-is-definitely-wrong-password',
     });
 
-    if (error) {
+    if (loginError && loginError.message.toLowerCase().includes('invalid login credentials')) {
+      setError('This email is not registered. Please enter a registered email ID.');
       toast({
-        title: 'Error',
-        description: error.message,
+        title: 'Reset Failed',
+        description: 'This email is not registered. Please enter a registered email ID.',
+        variant: 'destructive',
+      });
+      setLoading(false);
+      return;
+    }
+
+    const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: 'https://notes-transposer.vercel.app/update-password',
+    });
+
+    if (resetError) {
+      setError(resetError.message);
+      toast({
+        title: 'Reset Failed',
+        description: resetError.message,
         variant: 'destructive',
       });
     } else {
       toast({
-        title: 'Reset Link Sent',
-        description: 'We\'ve sent a reset link to your email. If you don\'t receive it, please check your Spam',
+        title: 'Reset Link Sent!',
+        description: 'Check your email to reset your password. If not received, check your spam folder.',
       });
+      setEmail('');
     }
+
     setLoading(false);
   };
 
@@ -44,7 +76,7 @@ const ForgotPassword: React.FC = () => {
           <CardTitle className="text-2xl font-display text-white">Forgot Password</CardTitle>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleReset} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="email" className="text-white">Email</Label>
               <Input
@@ -57,7 +89,13 @@ const ForgotPassword: React.FC = () => {
               />
             </div>
 
-            <Button type="submit" className="w-full musical-gradient hover:opacity-90 transition-opacity" disabled={loading}>
+            {error && <p className="text-sm text-red-400 p-2 bg-red-900/50 rounded-md">{error}</p>}
+
+            <Button 
+              type="submit"
+              className="w-full musical-gradient hover:opacity-90 transition-opacity"
+              disabled={loading}
+            >
               {loading ? 'Sending...' : (
                 <div className="flex items-center justify-center gap-2">
                   <Mail className="h-4 w-4" />
@@ -65,10 +103,6 @@ const ForgotPassword: React.FC = () => {
                 </div>
               )}
             </Button>
-
-            <div className="text-center mt-4">
-              <Link to="/" className="text-slate-400 hover:text-white text-sm">Back to Sign In</Link>
-            </div>
           </form>
         </CardContent>
       </Card>
