@@ -12,17 +12,14 @@ import {
   Settings,
   LogOut,
   HelpCircle,
-  Mail,
-  Trash2
+  Mail
 } from 'lucide-react';
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator
 } from '@/components/ui/dropdown-menu';
-import { useToast } from '@/hooks/use-toast';
 
 const DashboardPage: React.FC = () => {
   const [activeView, setActiveView] = useState<'transpose' | 'history'>('transpose');
@@ -32,43 +29,8 @@ const DashboardPage: React.FC = () => {
   const [toScale, setToScale] = useState('');
   const [result, setResult] = useState<TransposerResult | null>(null);
 
-  const { logout, user } = useAuth();
-  const { toast } = useToast();
+  const { logout } = useAuth();
   const navigate = useNavigate();
-
-  const handleDeleteAccount = async () => {
-    const confirmDelete = confirm("Are you sure you want to delete your account? This action is irreversible.");
-    if (!confirmDelete || !user) return;
-
-    try {
-      const response = await fetch('/api/delete-user', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id })
-      });
-
-      if (response.ok) {
-        toast({
-          title: "Account Deleted",
-          description: "Your account has been successfully deleted."
-        });
-        logout();
-      } else {
-        const errorData = await response.json();
-        toast({
-          title: "Deletion Failed",
-          description: errorData.error || 'Something went wrong.',
-          variant: "destructive"
-        });
-      }
-    } catch (err) {
-      toast({
-        title: "Deletion Failed",
-        description: 'Network error or unexpected failure.',
-        variant: "destructive"
-      });
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-900 via-blue-900 to-indigo-900 p-4 md:p-6">
@@ -90,7 +52,7 @@ const DashboardPage: React.FC = () => {
                 Settings
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
+            <DropdownMenuContent className="w-48">
               <DropdownMenuItem onClick={logout}>
                 <LogOut className="h-4 w-4 mr-2" /> Logout
               </DropdownMenuItem>
@@ -99,10 +61,6 @@ const DashboardPage: React.FC = () => {
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => navigate('/contact')}>
                 <Mail className="h-4 w-4 mr-2" /> Contact Us
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleDeleteAccount} className="text-red-500">
-                <Trash2 className="h-4 w-4 mr-2" /> Delete Account
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
