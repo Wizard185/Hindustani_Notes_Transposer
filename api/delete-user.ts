@@ -1,43 +1,31 @@
-// /api/delete-user.ts
-import { createClient } from '@supabase/supabase-js';
-
+// api/delete-user.ts
 export const config = {
   runtime: 'edge',
 };
 
 export default async function handler(req: Request) {
   if (req.method !== 'POST') {
-    return new Response(JSON.stringify({ error: 'Method not allowed' }), {
-      status: 405,
-      headers: { 'Content-Type': 'application/json' },
-    });
+    return new Response(JSON.stringify({ error: 'Only POST allowed' }), { status: 405 });
   }
 
-  const { userId } = await req.json();
+  try {
+    const { userId } = await req.json();
 
-  if (!userId) {
-    return new Response(JSON.stringify({ error: 'Missing user ID' }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
+const res = await fetch(`https://onrxwzgoqphpwqybsaim.supabase.co/auth/v1/admin/users/${userId}`, {
+  method: 'DELETE',
+  headers: {
+    Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`,
+    apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!
+      }
     });
+
+    if (!res.ok) {
+      const error = await res.json();
+      return new Response(JSON.stringify({ error: error.message }), { status: res.status });
+    }
+
+    return new Response(JSON.stringify({ success: true }), { status: 200 });
+  } catch (err) {
+    return new Response(JSON.stringify({ error: 'Failed to delete user' }), { status: 500 });
   }
-
-  const supabaseAdmin = createClient(
-    process.env.SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
-  );
-
-  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
-
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
-      status: 400,
-      headers: { 'Content-Type': 'application/json' },
-    });
-  }
-
-  return new Response(JSON.stringify({ success: true }), {
-    status: 200,
-    headers: { 'Content-Type': 'application/json' },
-  });
 }

@@ -4,9 +4,7 @@
   ],
   "functions": {
     "api/delete-user.ts": {
-      "runtime": "vercel-edge"
+      "runtime": "edge"
     }
   }
 }
-
-
