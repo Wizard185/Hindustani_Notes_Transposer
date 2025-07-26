@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Mail, ArrowLeft } from 'lucide-react';
+import { Mail } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/supabase/supabaseClient';
 
@@ -32,23 +32,6 @@ const ForgotPassword: React.FC = () => {
 
     setLoading(true);
 
-    // Check if email is registered using invalid login trick
-    const { error: loginError } = await supabase.auth.signInWithPassword({
-      email,
-      password: 'this-is-definitely-wrong-password',
-    });
-
-    if (loginError && loginError.message.toLowerCase().includes('invalid login credentials')) {
-      setError('This email is not registered. Please enter a registered email ID.');
-      toast({
-        title: 'Reset Failed',
-        description: 'This email is not registered. Please enter a registered email ID.',
-        variant: 'destructive',
-      });
-      setLoading(false);
-      return;
-    }
-
     const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo: 'https://notes-transposer.vercel.app/update-password',
     });
@@ -62,7 +45,7 @@ const ForgotPassword: React.FC = () => {
       });
     } else {
       toast({
-        title: 'Reset Link Sent!',
+        title: 'Reset Link Sent if the email is registered only!',
         description: 'Check your email to reset your password. If not received, check your spam folder.',
       });
       setEmail('');
